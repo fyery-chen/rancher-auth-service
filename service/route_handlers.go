@@ -14,6 +14,7 @@ import (
 	"github.com/rancher/go-rancher/v2"
 	"github.com/rancher/rancher-auth-service/model"
 	"github.com/rancher/rancher-auth-service/server"
+	"gopkg.in/cas.v2"
 )
 
 const (
@@ -21,6 +22,7 @@ const (
 	redirectBackBase = "redirectBackBase"
 	redirectBackPath = "redirectBackPath"
 	getSamlAuthToken = "/v1-auth/saml/authtoken"
+	casSessionName   = "_cas_session"
 )
 
 //CreateToken is a handler for route /token and returns the jwt token after authenticating the user
@@ -38,36 +40,71 @@ func CreateToken(w http.ResponseWriter, r *http.Request) {
 
 	securityCode := jsonInput["code"]
 	accessToken := jsonInput["accessToken"]
+	//used for yunhong authentication
+	authTag := jsonInput["authTag"]
+	service := jsonInput["service"]
 
-	if securityCode != "" {
-		log.Debugf("CreateToken called with securityCode")
-		//getToken
-		token, status, err := server.CreateToken(jsonInput)
+	if authTag != "" {
+		log.Debugf("CreateToken called with Yunhong auth, service: %s", service)
+
+		//authentication with cas-server
+		ret := server.InitCASAuth(w, r)
+
+		session, err := r.Cookie(casSessionName)
+
 		if err != nil {
-			log.Errorf("GetToken failed with error: %v", err)
-			if status == 0 {
-				status = http.StatusInternalServerError
+			jsonInput[casSessionName] = session.Value
+		}
+		//ret is true that indicates authentication is successful
+		if ret {
+			user := cas.Username(r)
+			//attributes := cas.Attributes(r)
+			jsonInput["user"] = user
+			//TODO add attributes to jsonput to use
+			token, status, err := server.CreateToken(jsonInput)
+			if err != nil {
+				log.Errorf("GetToken failed with error: %v, service: %s", err, service)
+				if status == 0 {
+					status = http.StatusInternalServerError
+				}
+				ReturnHTTPError(w, r, status, fmt.Sprintf("%v", err))
 			}
-			ReturnHTTPError(w, r, status, fmt.Sprintf("%v", err))
+			api.GetApiContext(r).Write(&token)
+		} else {
+			ReturnHTTPError(w, r, http.StatusBadRequest, "Bad Request, Please check the request content")
 			return
 		}
-		api.GetApiContext(r).Write(&token)
-	} else if accessToken != "" {
-		log.Debugf("RefreshToken called with accessToken %s", accessToken)
-		//getToken
-		token, status, err := server.RefreshToken(jsonInput)
-		if err != nil {
-			log.Errorf("GetToken failed with error: %v", err)
-			if status == 0 {
-				status = http.StatusInternalServerError
-			}
-			ReturnHTTPError(w, r, status, fmt.Sprintf("%v", err))
-			return
-		}
-		api.GetApiContext(r).Write(&token)
 	} else {
-		ReturnHTTPError(w, r, http.StatusBadRequest, "Bad Request, Please check the request content")
-		return
+		if securityCode != "" {
+			log.Debugf("CreateToken called with securityCode")
+			//getToken
+			token, status, err := server.CreateToken(jsonInput)
+			if err != nil {
+				log.Errorf("GetToken failed with error: %v", err)
+				if status == 0 {
+					status = http.StatusInternalServerError
+				}
+				ReturnHTTPError(w, r, status, fmt.Sprintf("%v", err))
+				return
+			}
+			api.GetApiContext(r).Write(&token)
+		} else if accessToken != "" {
+			log.Debugf("RefreshToken called with accessToken %s", accessToken)
+			//getToken
+			token, status, err := server.RefreshToken(jsonInput)
+			if err != nil {
+				log.Errorf("GetToken failed with error: %v", err)
+				if status == 0 {
+					status = http.StatusInternalServerError
+				}
+				ReturnHTTPError(w, r, status, fmt.Sprintf("%v", err))
+				return
+			}
+			api.GetApiContext(r).Write(&token)
+		} else {
+			ReturnHTTPError(w, r, http.StatusBadRequest, "Bad Request, Please check the request content")
+			return
+		}
 	}
 }
 

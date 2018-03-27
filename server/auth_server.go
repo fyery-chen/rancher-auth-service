@@ -24,6 +24,7 @@ import (
 	"github.com/rancher/rancher-auth-service/providers"
 	"github.com/rancher/rancher-auth-service/util"
 	"github.com/urfave/cli"
+	"github.com/rancher/rancher-auth-service/providers/yunhong"
 )
 
 const (
@@ -585,7 +586,7 @@ func UpgradeSettings() error {
 	//read the current provider
 	var settings []string
 	settings = append(settings, providerSetting)
-	dbSettings, err := readCommonSettings(settings)
+	dbSettings, err := readCommonSettings(settings)//common settings
 	if err != nil {
 		log.Errorf("UpgradeSettings: Error reading existing DB settings %v", err)
 		return err
@@ -799,23 +800,25 @@ func GetConfig(accessToken string, listOnly bool) (model.AuthConfig, error) {
 			config.AllowedIdentities = getAllowedIdentities(dbSettings[allowedIdentitiesSetting], accessToken, newProvider.GetIdentitySeparator())
 			settingNames := newProvider.GetProviderSettingList(listOnly)
 			providerSettings, err := readSettings(newProvider.GetName())
-			// Filter out provider specific secret settings if listOnly=true
-			if listOnly {
-				for _, s := range settingNames {
-					allowedSettings[s] = true
-				}
-				for k := range providerSettings {
-					if !allowedSettings[k] {
-						secretSettings = append(secretSettings, k)
+			if providerNameInDb != "yunhongconfig" {
+				// Filter out provider specific secret settings if listOnly=true
+				if listOnly {
+					for _, s := range settingNames {
+						allowedSettings[s] = true
+					}
+					for k := range providerSettings {
+						if !allowedSettings[k] {
+							secretSettings = append(secretSettings, k)
+						}
+					}
+					for _, k := range secretSettings {
+						delete(providerSettings, k)
 					}
 				}
-				for _, k := range secretSettings {
-					delete(providerSettings, k)
+				if err != nil {
+					log.Errorf("GetConfig: Error reading provider DB settings %v", err)
+					return config, nil
 				}
-			}
-			if err != nil {
-				log.Errorf("GetConfig: Error reading provider DB settings %v", err)
-				return config, nil
 			}
 			newProvider.AddProviderConfig(&config, providerSettings)
 		}
@@ -1074,6 +1077,14 @@ func IsSamlJWTValid(value string) (bool, map[string][]string) {
 		}
 	}
 	return false, samlData
+}
+
+//InitCASAuth used for yunhong auth
+func InitCASAuth(w http.ResponseWriter, r *http.Request) bool {
+	if provider != nil {
+		return provider.(*yunhong.YHProvider).ProcessCasAuth(w, r)
+	}
+	return false
 }
 
 func TestLogin(testAuthConfig model.TestAuthConfig, accessToken string, token string) (int, error) {

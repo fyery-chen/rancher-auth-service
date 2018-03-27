@@ -118,8 +118,8 @@ func main() {
 
 func StartService(c *cli.Context) {
 
-	server.SetEnv(c)
-	providers.RegisterProviders()
+	server.SetEnv(c)//one
+	providers.RegisterProviders()//two, completed
 
 	if c.GlobalBool("debug") {
 		log.SetLevel(log.DebugLevel)
@@ -132,18 +132,18 @@ func StartService(c *cli.Context) {
 
 	log.Info("Starting Rancher Auth service")
 
-	err := server.UpgradeCase()
+	err := server.UpgradeCase()//three
 	if err != nil {
 		log.Fatalf("Failed on upgrade case: %v", err)
 	}
 
-	_, err = server.Reload(false)
+	_, err = server.Reload(false)//four
 
 	if err != nil {
 		log.Fatalf("Failed to reload the auth provider from db on start: %v", err)
 	}
 
-	router := service.NewRouter()
+	router := service.NewRouter()//five
 
 	log.Info("Listening on ", c.GlobalString("listen"))
 	log.Fatal(http.ListenAndServe(c.GlobalString("listen"), router))
