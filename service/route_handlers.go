@@ -18,10 +18,11 @@ import (
 )
 
 const (
-	samlParam        = "samlJWT"
-	redirectBackBase = "redirectBackBase"
-	redirectBackPath = "redirectBackPath"
-	getSamlAuthToken = "/v1-auth/saml/authtoken"
+	samlParam             = "samlJWT"
+	redirectBackBase      = "redirectBackBase"
+	redirectBackPath      = "redirectBackPath"
+	getSamlAuthToken      = "/v1-auth/saml/authtoken"
+	userAccount			  = "userAccount"
 )
 
 //CreateToken is a handler for route /token and returns the jwt token after authenticating the user
@@ -31,6 +32,7 @@ func CreateToken(w http.ResponseWriter, r *http.Request) {
 		log.Errorf("GetToken failed with error: %v", err)
 	}
 	var jsonInput map[string]string
+	var codeInput map[string]string
 
 	err = json.Unmarshal(bytes, &jsonInput)
 	if err != nil {
@@ -41,7 +43,30 @@ func CreateToken(w http.ResponseWriter, r *http.Request) {
 	accessToken := jsonInput["accessToken"]
 
 	if securityCode != "" {
-		log.Debugf("CreateToken called with securityCode")
+		log.Infof("CreateToken called with securityCode")
+		//used for yunhong authentication
+		err = json.Unmarshal([]byte(securityCode), &codeInput)
+		if err != nil {
+			log.Errorf("unmarshal code failed with error: %v", err)
+		}
+		ticket := codeInput["ticket"]
+		authProvider := codeInput["authProvider"]
+		isTest := codeInput["isTest"]
+		if authProvider == "yunhongconfig" {
+			log.Debugf("code: %s, authProvider: %s, ticket: %s, requestURL: %s, isTest: %s",
+				securityCode, authProvider, ticket, r.RequestURI, isTest)
+			//authentication with cas-server
+			ret, user := server.InitCASAuth(w, r, ticket, isTest)
+			//ret is true that indicates authentication is successful
+			if ret {
+				jsonInput[userAccount] = user
+				jsonInput["isTest"] = isTest
+			} else {
+				ReturnHTTPError(w, r, http.StatusBadRequest, "Bad Request, Please check the request content")
+				return
+			}
+		}
+
 		//getToken
 		token, status, err := server.CreateToken(jsonInput)
 		if err != nil {
@@ -70,6 +95,7 @@ func CreateToken(w http.ResponseWriter, r *http.Request) {
 		ReturnHTTPError(w, r, http.StatusBadRequest, "Bad Request, Please check the request content")
 		return
 	}
+
 }
 
 //GetIdentities is a handler for route /me/identities and returns group memberships and details of the user

@@ -12,6 +12,7 @@ type AuthConfig struct {
 	GithubConfig      GithubConfig      `json:"githubConfig"`
 	ShibbolethConfig  ShibbolethConfig  `json:"shibbolethConfig"`
 	LdapConfig        LdapConfig        `json:"ldapConfig"`
+	YunhongConfig     YunhongConfig     `json:"yunhongConfig"`
 }
 
 type TestAuthConfig struct {
