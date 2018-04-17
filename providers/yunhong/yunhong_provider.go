@@ -155,30 +155,50 @@ func (g *YHProvider) RefreshToken(json map[string]string) (model.Token, int, err
 func (g *YHProvider) GetIdentities(accessToken string) ([]client.Identity, error) {
 	var identities []client.Identity
 
+	split := strings.SplitN(accessToken, ":", 2)
+	userType, _ := split[0], split[1]
+
 	resp, err := g.yunhongClient.casClient.GetFromYunhong(g.yunhongClient.config, accessToken)
 	if err != nil {
 		return identities, err
 	}
 	defer resp.Body.Close()
-	var userInfo UserAccount
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return identities, err
 	}
 
-	if err := json.Unmarshal(b, &userInfo); err != nil {
-		return identities, err
+	if userType == "0" {
+		var userInfo UserAccount
+		if err := json.Unmarshal(b, &userInfo); err != nil {
+			return identities, err
+		}
+
+		for _, u := range userInfo.Data {
+			userIdentity := client.Identity{Resource: client.Resource{
+				Type: "identity",
+			}}
+
+			u.toIdentity(UserType, &userIdentity, true)
+			identities = append(identities, userIdentity)
+		}
+	} else {
+		var userAdInfo UserAdAccount
+		if err := json.Unmarshal(b, &userAdInfo); err != nil {
+			return identities, err
+		}
+
+		for _, u := range userAdInfo {
+			userIdentity := client.Identity{Resource: client.Resource{
+				Type: "identity",
+			}}
+
+			u.toIdentity(UserType, &userIdentity, true)
+			identities = append(identities, userIdentity)
+		}
 	}
 
-	for _, u := range userInfo.Data {
-		userIdentity := client.Identity{Resource: client.Resource{
-			Type: "identity",
-		}}
-
-		u.toIdentity(UserType, &userIdentity, true)
-		identities = append(identities, userIdentity)
-	}
 
 	return identities, nil
 }
@@ -230,7 +250,7 @@ func (g *YHProvider) SearchIdentities(name string, exactMatch bool, accessToken 
 		return identities, err
 	}
 	defer resp2.Body.Close()
-	var adUserInfo UserAccount
+	var adUserInfo UserAdAccount
 
 	b2, err := ioutil.ReadAll(resp2.Body)
 	if err != nil {
@@ -241,7 +261,7 @@ func (g *YHProvider) SearchIdentities(name string, exactMatch bool, accessToken 
 		return identities, err
 	}
 
-	for _, u := range adUserInfo.Data {
+	for _, u := range adUserInfo {
 		userIdentity := client.Identity{Resource: client.Resource{
 			Type: "identity",
 		}}
