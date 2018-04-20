@@ -96,8 +96,16 @@ func (g *YHProvider) GenerateToken(json map[string]string) (model.Token, int, er
 }
 
 func (g *YHProvider) createToken(json map[string]string) (model.Token, int, error) {
-	user := json["userAccount"]
+	accessToken := json["accessToken"]
+	var user string
+	if accessToken != "" {
+		user = accessToken[len(accessToken)-1 :] + ":" + accessToken[0 : len(accessToken)-1]
+		log.Infof("Get refreshToken request, %s", user)
+	} else {
+		user = json["userAccount"]
+	}
 	isTest := json["isTest"]
+
 	status := 0
 	var identities []client.Identity
 	var token = model.Token{Resource: client.Resource{
@@ -143,12 +151,7 @@ func GetUserIdentity(identities []client.Identity, userType string, externalID s
 
 //RefreshToken re-authenticates and generate a new token
 func (g *YHProvider) RefreshToken(json map[string]string) (model.Token, int, error) {
-	user := json["userAccount"]
-	if user != "" {
-		log.Debugf("YunhongIdentityProvider RefreshToken called for user %v", user)
-		return g.createToken(json)
-	}
-	return model.Token{}, 0, fmt.Errorf("Cannot refresh token from Yunhong, no user found in request")
+	return g.createToken(json)
 }
 
 //GetIdentities returns list of user and group identities associated to this token
